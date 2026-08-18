@@ -5,7 +5,7 @@
 # prod → solo runtime deps, código copiado dentro de la imagen.
 
 # ETAPA 1: Base común
-FROM python:3.13-slim-trixie AS base
+FROM python:3.14-slim-trixie AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
