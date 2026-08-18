@@ -1,0 +1,71 @@
+# Configuración de tooling del proyecto (ruff, pytest, coverage).
+# No declara [project]: el código se ejecuta desde `src/` vía PYTHONPATH, no se instala
+# como paquete. Ver .deploy/Dockerfile (PYTHONPATH=/app/src) y tests/conftest.py.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "S",    # flake8-bandit (seguridad: secretos, SQL armado a mano, subprocess)
+    "ARG",  # flake8-unused-arguments
+    "SLF",  # flake8-self (acceso a atributos privados de otra clase)
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (lo maneja el formatter)
+    "B008",   # llamadas a función en defaults de argumentos (patrón de dlt/Prefect)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Los tests usan assert (S101) y acceden a internals a propósito para verificarlos.
+# Los tests usan assert (S101), credenciales de juguete (S105/S106), acceden a
+# internals a propósito (SLF001) y arman SQL con nombres de tabla de las specs
+# del propio repo (S608).
+"tests/**" = ["S101", "S105", "S106", "S608", "SLF001", "ARG001", "ARG002"]
+# Los scripts operativos importan después de tocar sys.path (E402) y arman SQL con
+# nombres de tabla del catálogo, no con input externo (S608).
+"scripts/**" = ["E402", "S608"]
+"src/dbt/**" = ["E402"]
+# El manifiesto arma SQL con el nombre de tabla como identificador (constante del
+# código, nunca input externo); los valores siempre van bindeados. Ver el módulo.
+"src/ingestion/sources/google_drive/manifest.py" = ["S608"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ingestion", "orchestration", "shared"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: requiere un Postgres real en localhost:5434 (se saltea si no está)",
+    "live: pega a la API real del origen; skip salvo RUN_LIVE_TESTS=1 + credenciales",
+]
+
+[tool.coverage.run]
+source = ["ingestion", "orchestration", "shared"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "if __name__ == .__main__.",
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]

@@ -1,0 +1,31 @@
+# Perfil de dbt. Todo sale de variables de entorno: el mismo archivo sirve en
+# local, en CI y en el servidor, y no hay credenciales en el repo.
+etl_arquitectura:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST') }}"
+      user: "{{ env_var('DB_USER') }}"
+      pass: "{{ env_var('DB_PASSWORD') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('DB_NAME') }}"
+      # schema default; el macro generate_schema_name enruta cada capa a su schema.
+      schema: raw
+      threads: 4
+      keepalives_idle: 0
+      sslmode: "{{ env_var('DB_SSLMODE', 'disable') }}"
+
+    prod:
+      type: postgres
+      host: "{{ env_var('DB_HOST') }}"
+      user: "{{ env_var('DB_USER') }}"
+      pass: "{{ env_var('DB_PASSWORD') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('DB_NAME') }}"
+      schema: raw
+      threads: 8
+      keepalives_idle: 0
+      sslmode: "{{ env_var('DB_SSLMODE', 'require') }}"
+      connect_timeout: 30

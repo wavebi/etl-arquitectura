@@ -1,0 +1,2 @@
+# Producción: solo runtime, sin herramientas de desarrollo.
+-r base.txt

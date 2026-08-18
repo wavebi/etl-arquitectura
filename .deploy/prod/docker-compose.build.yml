@@ -1,0 +1,14 @@
+# Override de emergencia: compila la imagen EN el servidor en lugar de bajarla del
+# registry. Requiere que el código fuente esté presente en el directorio de deploy.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# El camino normal es el otro: el CI construye una vez, publica la imagen con el tag
+# del release y el servidor solo la baja. Esto existe para el día que el registry no
+# esté disponible y haya que levantar igual.
+services:
+  etl-worker:
+    build:
+      context: ../../
+      dockerfile: .deploy/Dockerfile
+      target: prod

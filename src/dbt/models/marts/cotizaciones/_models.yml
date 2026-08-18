@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: fct_cotizacion
+    description: >
+      Hecho de cotizaciones (snapshot periódico). Grano: una fila por fecha y par de
+      monedas. `cotizacion` es SEMI-ADITIVA: no se suma entre fechas, se promedia o
+      se toma la última.
+    columns:
+      - name: clave_fecha
+        description: "FK a dim_fecha."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_fecha')
+                field: clave_fecha
+      - name: clave_moneda_base
+        description: "FK a dim_moneda en su rol de moneda base."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda')
+                field: clave_moneda
+      - name: clave_moneda_cotizada
+        description: "FK a dim_moneda en su rol de moneda cotizada."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda')
+                field: clave_moneda
+      - name: cotizacion
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: true
+      - name: cotizacion_inversa
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fecha, moneda_base, moneda_cotizada]
+          config:
+            # error: el grano del hecho es el contrato con BI. Si se duplica, todos
+            # los promedios y sumas quedan mal.
+            severity: error
+
+  - name: rpt_cotizacion_mensual
+    description: >
+      Agregado mensual por par de monedas: promedio, mínimo, máximo, apertura, cierre
+      y volatilidad. Grano: mes × par de monedas.
+    columns:
+      - name: anio_mes
+        data_tests: [not_null]
+      - name: cantidad_dias_publicados
+        description: "Días con publicación en el mes (nunca 31: el BCE no publica fines de semana)."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 23
+      - name: cotizacion_promedio
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [anio_mes, moneda_base, moneda_cotizada]

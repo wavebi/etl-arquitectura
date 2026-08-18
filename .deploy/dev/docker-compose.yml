@@ -1,0 +1,158 @@
+# =============================================================================
+# DESARROLLO (dev local) — todo el stack en Docker, nada toca la nube.
+# =============================================================================
+# Servicios:
+#   postgres       warehouse + metadata de Prefect (schemas separados)
+#   prefect-server API + UI de Prefect
+#   etl-worker     ejecuta los flows; el repo va monteado, se edita en vivo
+#   dbt-docs       documentación y linaje de dbt servidos por HTTP
+#
+# Uso:  make up   |   make down   |   make logs   |   make sh
+# =============================================================================
+name: etl-arquitectura-dev
+
+x-env: &env_files
+  env_file:
+    # Un solo archivo por entorno, con TODAS las variables. Sin cascada: lo que ves
+    # en .env.local es exactamente lo que reciben los contenedores.
+    - path: ../../.env.local
+      required: false
+
+services:
+  postgres:
+    <<: *env_files
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      # El container arranca con el superuser; los roles del ETL los crea
+      # scripts/init_db_permissions.sql desde el init.
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-warehouse}
+      TZ: ${TIMEZONE:-America/Argentina/Buenos_Aires}
+      PGTZ: ${TIMEZONE:-America/Argentina/Buenos_Aires}
+      # Los consume el script de init vía psql (ver 00-init.sh).
+      ETL_USER: ${DB_USER:-etl_app}
+      ETL_PASSWORD: ${DB_PASSWORD:-dev_password}
+      BI_READER_PASSWORD: ${BI_READER_PASSWORD:-bi_password}
+      ANALYST_PASSWORD: ${ANALYST_PASSWORD:-analyst_password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5442}:5432"
+    volumes:
+      # pg18+ guarda los datos en /var/lib/postgresql/<major>/docker: el mount va
+      # un nivel arriba (antes era /var/lib/postgresql/data).
+      - postgres_data:/var/lib/postgresql
+      # Los scripts de /docker-entrypoint-initdb.d/ corren UNA vez, con la base
+      # vacía, en orden alfabético. Se montea solo scripts/db para que Postgres no
+      # ejecute los scripts operativos del proyecto.
+      - ../../scripts/db:/docker-entrypoint-initdb.d:ro
+      - ../../scripts:/scripts:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [etl]
+
+  prefect-server:
+    <<: *env_files
+    image: prefecthq/prefect:3.8.3-python3.13
+    command: prefect server start --host 0.0.0.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PREFECT_UI_PORT:-4210}:4200"
+    environment:
+      # Prefect guarda su metadata en el MISMO Postgres, en el schema `prefect`: es
+      # una instancia menos que operar. El schema queda aislado (solo lo toca su
+      # rol) y NO se modela con dbt — ver docs/adr/0003.
+      # Se conecta con su propio rol: el search_path del rol manda sus tablas al
+      # schema `prefect` (ver scripts/init_db_permissions.sql).
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${PREFECT_DB_USER:-prefect_app}:${PREFECT_DB_PASSWORD:-prefect_password}@postgres:5432/${DB_NAME:-warehouse}
+      - PREFECT_UI_URL=http://localhost:${PREFECT_UI_PORT:-4210}/api
+      - PREFECT_API_URL=http://localhost:${PREFECT_UI_PORT:-4210}/api
+      - PREFECT_UI_API_URL=http://localhost:${PREFECT_UI_PORT:-4210}/api
+      - TZ=${TIMEZONE:-America/Argentina/Buenos_Aires}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:4200/api/health\")' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [etl]
+
+  etl-worker:
+    <<: *env_files
+    build:
+      context: ../../
+      dockerfile: .deploy/Dockerfile
+      target: dev
+    restart: unless-stopped
+    # El repo monteado: se edita el código y el worker toma el cambio sin rebuild.
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      - ../../:/app
+    environment:
+      - PYTHONPATH=/app/src
+      - PREFECT_HOME=/app/.prefect
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      # Estado de dlt (cursores incrementales) dentro del repo montado: queda
+      # visible para diagnóstico y no se pierde al recrear el contenedor.
+      - DLT_DATA_DIR=/app/.dlt
+      # Paths absolutos dentro del container (el .env los declara relativos).
+      - DBT_PROJECT_DIR=/app/src/dbt
+      - DBT_TARGET_PATH=/app/src/dbt/target
+      - DBT_LOG_PATH=/app/logs/dbt
+      # Dentro de la red de docker la base es el servicio, no localhost. Pisa lo
+      # que dice .env.local (que apunta al host, para correr cosas desde afuera).
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - TZ=${TIMEZONE:-America/Argentina/Buenos_Aires}
+    command: bash /app/.deploy/entrypoint.sh
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://prefect-server:4200/api/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks: [etl]
+
+  dbt-docs:
+    <<: *env_files
+    build:
+      context: ../../
+      dockerfile: .deploy/Dockerfile
+      target: dev
+    restart: unless-stopped
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      - ../../:/app
+    environment:
+      - PYTHONPATH=/app/src
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DBT_PROJECT_DIR=/app/src/dbt
+      - DBT_TARGET_PATH=/app/src/dbt/target
+      - DBT_LOG_PATH=/app/logs/dbt
+      - TZ=${TIMEZONE:-America/Argentina/Buenos_Aires}
+    # Genera el catálogo (necesita la DB para leer el schema real) y lo sirve.
+    # Regenerar después de cambiar modelos: `make dbt-docs`.
+    command: bash /app/.deploy/dbt-docs.sh
+    ports:
+      - "127.0.0.1:${DBT_DOCS_PORT:-8085}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [etl]
+
+volumes:
+  postgres_data:
+
+networks:
+  etl:

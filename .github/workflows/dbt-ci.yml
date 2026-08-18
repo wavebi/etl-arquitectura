@@ -1,0 +1,104 @@
+name: dbt CI
+
+on:
+  pull_request:
+    paths:
+      - "src/dbt/**"
+
+# No es un check REQUERIDO en las reglas de rama: como está filtrado por path, en un
+# PR que no toca dbt nunca arrancaría y el PR quedaría bloqueado esperándolo.
+concurrency:
+  group: dbt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dbt-check:
+    name: dbt build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      # Las lee src/dbt/profiles.yml al parsear el proyecto dbt.
+      TZ: America/Argentina/Buenos_Aires
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: ci_db
+      DB_USER: ci_user
+      DB_PASSWORD: ci_password
+      DB_SSLMODE: disable
+      DBT_TARGET: dev
+      DBT_LOG_PATH: /tmp/dbt_logs
+      DBT_TARGET_PATH: /tmp/dbt_target
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "requirements/dev.txt"
+
+      - name: Install dependencies
+        run: |
+          # setup-uv instala un Python GESTIONADO por uv, no uno del sistema: por eso
+          # `--system` falla con "No system Python installation found". Se crea un venv
+          # explícito y se lo pone en el PATH, así los pasos siguientes llaman a los
+          # binarios directo (incluidos los que corren con working-directory: src/dbt).
+          uv venv
+          echo "${{ github.workspace }}/.venv/bin" >> "$GITHUB_PATH"
+          uv pip install -r requirements/dev.txt
+
+      - name: Create schemas
+        run: |
+          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USER -d $DB_NAME <<'SQL'
+            CREATE SCHEMA IF NOT EXISTS raw;
+            CREATE SCHEMA IF NOT EXISTS raw_staging;
+            CREATE SCHEMA IF NOT EXISTS staging;
+            CREATE SCHEMA IF NOT EXISTS marts;
+            CREATE SCHEMA IF NOT EXISTS scd2;
+            CREATE SCHEMA IF NOT EXISTS seeds;
+            CREATE SCHEMA IF NOT EXISTS dbt_test_audit;
+            -- Misma zona horaria que en dev y prod: si el CI corriera en UTC, un
+            -- test que compara contra current_date podría pasar acá y fallar allá.
+            ALTER DATABASE ci_db SET timezone TO 'America/Argentina/Buenos_Aires';
+          SQL
+
+      - name: Cargar el fixture de raw
+        # `dbt build` necesita datos: sin filas, un modelo que referencia una columna
+        # inexistente compila igual y el error aparece recién en la corrida del ETL.
+        run: |
+          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
+            -v ON_ERROR_STOP=1 -f tests/fixtures/raw_frankfurter.sql
+
+      - name: dbt deps
+        working-directory: src/dbt
+        run: dbt deps --profiles-dir .
+
+      # `build` y no `compile`: ejecuta seeds, modelos, snapshots y tests en orden de
+      # dependencias contra la base. Es lo que detecta casts imposibles, joins que
+      # multiplican filas y tests que no se cumplen — antes del merge, no en la
+      # próxima corrida del ETL.
+      - name: dbt build
+        working-directory: src/dbt
+        run: dbt build --profiles-dir .
+
+      - name: sqlfluff lint
+        working-directory: src/dbt
+        run: sqlfluff lint models/ --config .sqlfluff

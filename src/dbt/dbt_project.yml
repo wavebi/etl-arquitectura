@@ -1,0 +1,85 @@
+name: etl_arquitectura
+version: "1.0.0"
+config-version: 2
+
+profile: etl_arquitectura
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+snapshot-paths: ["scd2"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+asset-paths: ["assets"]
+
+packages-install-path: "dbt_packages"
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  # Piso temporal del calendario y de los modelos que filtran por fecha. Coincide
+  # con el primer día publicado por el origen (ver FRANKFURTER_HISTORY_START).
+  start_date: "1999-01-01"
+  # Zona horaria de presentación de los marts (macro to_local_ts).
+  display_timezone: "America/Argentina/Buenos_Aires"
+
+models:
+  etl_arquitectura:
+    # ── staging: 1:1 con raw. Renombrar, castear, limpiar. Nada de joins.
+    # Views: se recalculan solas y no ocupan espacio.
+    staging:
+      +materialized: view
+      +schema: staging
+      +tags: ["staging"]
+
+    # ── intermediate: lógica de negocio reutilizable (joins, ventanas, reglas).
+    # Ephemeral: se inlinea en quien lo consume, no crea objetos en la base.
+    # Si un intermediate lo usan 3+ marts y es caro, pasalo a +materialized: table.
+    intermediate:
+      # Ephemeral: dbt los inlinea como CTE en quien los consume, así que NO crean
+      # objetos en la base y no necesitan schema propio. Si alguno se vuelve caro y
+      # lo usan varios marts, ahí sí conviene `+materialized: table` y darle schema.
+      +materialized: ephemeral
+      +tags: ["intermediate"]
+
+    # ── marts: el modelo dimensional que consume BI. Tablas: lecturas rápidas.
+    marts:
+      +materialized: table
+      +schema: marts
+      +tags: ["marts"]
+      core:
+        # Dimensiones conformadas: las comparten todos los hechos.
+        +tags: ["core", "dimension"]
+      cotizaciones:
+        +tags: ["cotizaciones"]
+
+snapshots:
+  etl_arquitectura:
+    # Schema propio: son tablas de HISTORIA (con dbt_valid_from/to), no marts. Si
+    # vivieran en `marts`, BI las vería y alguien construiría un tablero sobre una
+    # tabla con versiones vigentes y vencidas mezcladas.
+    +schema: scd2
+    # La estrategia se define por snapshot (check + check_cols): el origen no
+    # expone una fecha de modificación confiable.
+    +invalidate_hard_deletes: true
+
+seeds:
+  etl_arquitectura:
+    +schema: seeds
+    # Declarar los tipos evita que dbt infiera mal (un código con ceros a la
+    # izquierda leído como integer pierde los ceros).
+    seed_moneda_region:
+      +column_types:
+        codigo_moneda: varchar
+        nombre_alternativo: varchar
+        region: varchar
+
+data_tests:
+  etl_arquitectura:
+    # severity warn por default: un test que falla avisa, no rompe el ETL. Los que
+    # SÍ deben romper se declaran con severity=error en su YAML.
+    +severity: warn
+    +store_failures: true
+    +schema: dbt_test_audit

@@ -1,0 +1,54 @@
+[sqlfluff]
+templater = dbt
+dialect = postgres
+max_line_length = 120
+indent_unit = space
+tab_space_size = 4
+# LT01: permitimos múltiples espacios antes de AS — estilo de alineación de columnas.
+# LT02: falso positivo cuando hay macros Jinja en posición de select.
+# RF04: aliases como source_endpoint / year_str contienen keywords no reservadas de PG.
+# ST06: exige columnas simples antes de las calculadas. En los modelos agrupamos las
+#       columnas por significado (claves, atributos, importes, metadata), que es lo que
+#       hace legible un staging de 40 columnas; el orden mecánico lo rompería.
+# RF06: pide sacar las comillas de los identificadores que "no las necesitan". En el
+#       staging SIEMPRE se citan las columnas de `raw`, porque raw conserva la grafía
+#       del origen (ver ADR 0005): hoy son minúsculas, mañana puede aparecer
+#       `FechaEmisión`. Citar siempre es una regla uniforme; citar "cuando haga falta"
+#       es una que se olvida justo el día que importa.
+exclude_rules = LT01,LT02,RF04,RF06,ST06
+
+[sqlfluff:templater:dbt]
+project_dir = src/dbt
+profiles_dir = src/dbt
+profile = etl_arquitectura
+
+[sqlfluff:indentation]
+indented_joins = false
+indented_using_on = true
+template_blocks_indent = false
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.column]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.length]
+min_alias_length = 1
+
+[sqlfluff:rules:convention.casting_style]
+# `cast(x as t)` en vez de `x::t`: es ANSI, se lee mejor anidado y evita la
+# ambigüedad de precedencia del `::` en expresiones largas.
+preferred_type_casting_style = cast

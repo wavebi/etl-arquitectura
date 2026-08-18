@@ -1,0 +1,17 @@
+# Hereda todas las dependencias de runtime.
+-r base.txt
+
+# --- TESTING -----------------------------------------------------------------
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-mock==3.15.1
+
+# --- LINTING -----------------------------------------------------------------
+# ruff: linter + formateador (reemplaza black, isort y flake8).
+ruff==0.16.3
+# sqlfluff: linter de los modelos dbt (usa el templater de dbt para compilar).
+sqlfluff==4.3.0
+sqlfluff-templater-dbt==4.3.0
+
+# --- GIT HOOKS ---------------------------------------------------------------
+pre-commit==4.6.2
