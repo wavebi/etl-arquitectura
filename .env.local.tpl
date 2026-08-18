@@ -45,8 +45,8 @@ DB_PASSWORD=${DB_PASSWORD:-dev_password}
 DB_SSLMODE=${DB_SSLMODE:-disable}
 
 # Superuser del Postgres local: lo usa el init para crear roles y permisos.
-POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
-POSTGRES_SUPERUSER_PASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+PG_ADMIN_USER=${PG_ADMIN_USER:-postgres}
+PG_ADMIN_PASSWORD=${PG_ADMIN_PASSWORD:-postgres}
 
 # Roles que crea scripts/init_db_permissions.sql.
 # prefect_app es el rol del orquestador: tiene su propio schema y search_path.

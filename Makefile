@@ -18,7 +18,7 @@
         test test-cov test-int test-live test-all \
         dbt dbt-build dbt-deps dbt-compile dbt-docs \
         ingest ingest-currencies ingest-rates ingest-reconcile ingest-historical \
-        db-dump db-restore-local db-clone diagnose
+        db-dump db-restore-local db-clone db-permissions diagnose
 
 ENV ?= dev
 
@@ -49,6 +49,7 @@ help:
 	@echo "  down         : baja los contenedores."
 	@echo "  logs / ps / sh"
 	@echo "  psql         : abre psql en el Postgres del compose."
+	@echo "  db-permissions: reaplica schemas, roles y permisos (sin borrar datos)."
 	@echo "  reset-db     : BORRA el volumen de Postgres y lo reinicializa."
 	@echo ""
 	@echo "URLs del entorno local (según .env.local):"
@@ -154,6 +155,21 @@ sh: require-env
 
 psql: require-env
 	@$(DOCKER_COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+# Reaplica schemas, roles, grants y permisos sobre la base local, SIN borrar datos.
+# Es el mismo script que corre el deploy en producción, contra la misma base de dev:
+# así un cambio en los permisos se prueba acá antes de que llegue a un cliente.
+#
+# Existe porque el init de Postgres corre UNA sola vez, con el volumen vacío: antes,
+# tocar el SQL de permisos obligaba a `reset-db` y perder todos los datos cargados.
+db-permissions: require-env
+	@set -a; . ./.env.local; set +a; \
+	DB_HOST=postgres DB_PORT=5432 DB_SSLMODE=disable \
+	PG_ADMIN_USER="$$PG_ADMIN_USER" PG_ADMIN_PASSWORD="$$PG_ADMIN_PASSWORD" \
+	ETL_PASSWORD="$$DB_PASSWORD" \
+	PG_DOCKER_NETWORK=$$($(DOCKER_COMPOSE) config --format json | \
+		$(VENV)/bin/python -c "import json,sys; print(next(iter(json.load(sys.stdin)['networks'].values()))['name'])") \
+	bash scripts/apply_db_permissions.sh
 
 # El init de Postgres (schemas, roles, permisos) corre UNA vez con el volumen
 # vacío: para volver a ejecutarlo hay que borrarlo.

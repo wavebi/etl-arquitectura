@@ -143,6 +143,45 @@ sin decir contra qué.
 |---|---|
 | `GH_PAT_RELEASE` | release-please: un PAT (no `GITHUB_TOKEN`) para que el tag que crea dispare el workflow de deploy |
 
+## Permisos de la base
+
+`scripts/init_db_permissions.sql` es la única fuente de verdad de schemas, roles,
+grants, ownership, `search_path` y extensiones. Es idempotente y corre en los dos
+entornos con el mismo envoltorio, `scripts/apply_db_permissions.sh`:
+
+| Entorno | Cuándo | Cómo |
+|---|---|---|
+| dev | al crear el volumen, y cuando quieras | init de Postgres · `make db-permissions` |
+| prod | en **cada deploy**, antes de levantar el stack | paso *Aplicar permisos de la base* |
+
+Que corra en cada deploy es lo que hace que un schema o un grant nuevo esté aplicado
+antes de que el worker intente usarlo, en vez de fallar en la primera corrida y que
+alguien tenga que entrar a la base a mano.
+
+`make db-permissions` no borra datos: es lo que hay que usar al tocar el SQL de
+permisos, en lugar de `make reset-db`.
+
+### Qué pasa con las passwords
+
+No es lo mismo para todos los roles, y la diferencia es deliberada:
+
+| Rol | Al desplegar | Cómo se rota |
+|---|---|---|
+| `etl_app`, `prefect_app` | **se sincronizan** desde los secrets (`ALTER ROLE`) | cambiar el secret y desplegar |
+| `bi_reader`, `analyst` | se crean si faltan; si existen **no se tocan** | `ALTER ROLE` explícito contra la base |
+
+Los dos primeros son los roles del stack: sus claves ya viajan en el mismo `.env`
+con el que se conecta el worker, así que si el secret cambiara y la base no, el
+deploy dejaría al ETL sin poder conectarse.
+
+Los otros dos son de personas y de herramientas configuradas a mano. Sincronizarlos
+significaría que un placeholder olvidado en un secret rompe el tablero de BI en el
+próximo deploy, sin aviso y sin relación aparente con lo que se desplegó.
+
+El script necesita un usuario con privilegios de administración del cluster
+(`PG_ADMIN_USER`): crear roles y extensiones pide más de lo que tiene —ni debería
+tener— `etl_app`.
+
 ## Base de datos: roles y permisos
 
 `scripts/init_db_permissions.sql` es idempotente y crea schemas, roles y permisos.
@@ -217,6 +256,7 @@ corrida y no tres.
 | `commit-lint.yml` | PR | Conventional Commits y título del PR |
 | `check-branch-rules.yml` | PR | valida el flujo de ramas |
 | `docker-build.yml` | PR que toca `.deploy/`, `requirements/` o `.dockerignore` | construye las imágenes dev y prod y corre los tests adentro |
+| `deploy.yml` (paso) | cada deploy | aplica schemas, roles y permisos antes de levantar el stack |
 | `release.yml` | push a `main` | release-please: Release PR y tag |
 | `deploy.yml` | tag `etl-arquitectura-v*` / manual | rsync al servidor + `compose up -d --build` |
 | `changelog.yml` | release publicada | actualiza el CHANGELOG en `main` |
@@ -322,7 +362,9 @@ exactamente la misma.
 2. Crear el directorio de deploy: `sudo mkdir -p /opt/etl-arquitectura/app/prod` y
    darle permiso al usuario del runner. Solo va a contener los archivos de compose y
    el `.env.prod`.
-3. Correr `scripts/init_db_permissions.sql` contra la base managed.
+3. Cargar `PG_ADMIN_USER` / `PG_ADMIN_PASSWORD` en el Environment `prod`. Los
+   permisos los aplica el deploy solo (paso *Aplicar permisos de la base*), así
+   que no hay que correr nada a mano contra la base managed.
 4. Crear el GitHub Environment `prod` con sus secrets.
 5. Disparar el deploy (tag o `workflow_dispatch`).
 6. Verificar: `docker compose ps`, el health del worker y el flow

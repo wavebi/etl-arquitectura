@@ -59,18 +59,18 @@ def test_los_dos_entornos_declaran_las_mismas_variables():
     local = variables(".env.local.tpl")
     prod = variables(".env.prod.tpl")
 
-    # Producción no publica puertos en el host, no monta el repo y no crea roles:
-    # esas variables son exclusivas del entorno local.
+    # Producción no publica puertos en el host ni monta el repo: esas variables son
+    # exclusivas del entorno local.
+    #
+    # Las credenciales de admin y las de los roles de solo lectura SÍ están en los
+    # dos: desde que el deploy aplica scripts/init_db_permissions.sql, producción
+    # también crea roles y necesita el mismo contrato que dev.
     solo_local = {
         "POSTGRES_PORT",
         "PREFECT_UI_PORT",
         "DBT_DOCS_PORT",
         "DOCKER_UID",
         "DOCKER_GID",
-        "POSTGRES_SUPERUSER",
-        "POSTGRES_SUPERUSER_PASSWORD",
-        "BI_READER_PASSWORD",
-        "ANALYST_PASSWORD",
     }
     # En local no hay imagen publicada: el compose de dev compila desde el repo.
     solo_prod = {"ETL_IMAGE"}

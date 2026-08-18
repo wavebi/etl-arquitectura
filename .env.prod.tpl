@@ -46,6 +46,26 @@ DB_SSLMODE=${DB_SSLMODE:-require}
 PREFECT_DB_USER=${PREFECT_DB_USER:-prefect_app}
 PREFECT_DB_PASSWORD=${PREFECT_DB_PASSWORD}
 
+# --- Permisos de la base (los aplica el deploy) -------------------------------
+# El deploy corre scripts/init_db_permissions.sql contra la base managed ANTES de
+# levantar el stack, para que los schemas y los grants estén listos cuando arranque
+# el worker. Lo ejecuta scripts/apply_db_permissions.sh.
+#
+# Admin del cluster managed. NO es el usuario del ETL: crear roles y extensiones
+# necesita más privilegios de los que tiene (ni debería tener) etl_app.
+PG_ADMIN_USER=${PG_ADMIN_USER}
+PG_ADMIN_PASSWORD=${PG_ADMIN_PASSWORD}
+
+# Claves de los roles de solo lectura. El deploy los CREA si faltan, pero si ya
+# existen NO les pisa la clave: son de personas y de herramientas configuradas a
+# mano, y un placeholder olvidado acá rompería el tablero de BI en el próximo
+# deploy, sin aviso. Rotarlas es un ALTER ROLE explícito contra la base.
+#
+# Las de etl_app y prefect_app SÍ se sincronizan en cada deploy: son DB_PASSWORD y
+# PREFECT_DB_PASSWORD, acá arriba. Ahí el secret es la fuente de verdad.
+BI_READER_PASSWORD=${BI_READER_PASSWORD}
+ANALYST_PASSWORD=${ANALYST_PASSWORD}
+
 # --- Prefect -----------------------------------------------------------------
 PREFECT_WORK_POOL_NAME=${PREFECT_WORK_POOL_NAME:-etl-process-pool}
 

@@ -90,7 +90,23 @@ CREATE SCHEMA IF NOT EXISTS prefect;         -- metadata del orquestador (flow r
 -- =========================================================================
 -- psql NO interpola variables dentro de un bloque $$...$$, así que la existencia
 -- del rol se pregunta afuera (\gset) y el CREATE ROLE va como sentencia suelta.
--- Los roles que ya existen no se tocan: su password no se pisa.
+--
+-- ## Qué pasa con las passwords cuando el rol YA existe
+--
+-- Este script corre en cada deploy, así que la respuesta importa y NO es la misma
+-- para los cuatro roles:
+--
+--   etl_app y prefect_app  →  SE SINCRONIZAN siempre (ALTER ROLE más abajo).
+--       Son los roles del stack: sus claves ya viajan en el mismo `.env` que se
+--       renderiza desde los secrets, y el worker se conecta con ellas. Si el secret
+--       cambiara y la base no, el deploy dejaría al ETL sin poder conectarse. Acá el
+--       secret ES la fuente de verdad.
+--
+--   bi_reader y analyst    →  se crean si faltan, y NUNCA se les pisa la clave.
+--       Son de personas y de herramientas configuradas a mano (el tablero de BI, el
+--       cliente SQL del analista). Sincronizarlas desde un secret significaría que un
+--       placeholder olvidado rompe el tablero en el próximo deploy, sin aviso y sin
+--       relación aparente con lo que se desplegó. Rotarlas es un ALTER ROLE explícito.
 SELECT (NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'etl_app'))::int AS need_etl \gset
 \if :need_etl
 CREATE ROLE etl_app LOGIN PASSWORD :'etl_password';
@@ -114,6 +130,12 @@ SELECT (NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'analyst'))::int AS n
 CREATE ROLE analyst LOGIN PASSWORD :'analyst_password';
 \echo 'Rol analyst creado.'
 \endif
+
+-- Sincronización de las claves del stack. Va SIEMPRE, exista o no el rol de antes:
+-- es lo que hace que rotar una clave sea "cambiar el secret y desplegar".
+-- `LOGIN` se reafirma por las dudas de que alguien lo haya revocado a mano.
+ALTER ROLE etl_app     WITH LOGIN PASSWORD :'etl_password';
+ALTER ROLE prefect_app WITH LOGIN PASSWORD :'prefect_password';
 
 -- Conexión a la base para los cuatro roles, y CREATE para el dueño del ETL: dlt y
 -- dbt necesitan poder crear un schema nuevo (un dataset nuevo, o `intermediate` si
