@@ -1,4 +1,6 @@
-// Config de commitlint. En JS y no en JSON porque `ignores` necesita funciones.
+// Config de commitlint. En .cjs y no en JSON porque `ignores` necesita funciones, y
+// no en .js porque la imagen de wagoid/commitlint-github-action tiene "type": "module"
+// en su package.json raíz: ahí un .js se carga como ESM y `module.exports` no existe.
 module.exports = {
   extends: ["@commitlint/config-conventional"],
 
