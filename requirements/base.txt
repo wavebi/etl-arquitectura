@@ -1,0 +1,35 @@
+# Dependencias de runtime. Pineadas exactas: un ETL tiene que ser reproducible
+# (el mismo commit, el mismo resultado). Dependabot abre los PR de actualización
+# semanalmente y el CI los verifica antes del merge — ver .github/dependabot.yml.
+
+# --- ORQUESTACIÓN ------------------------------------------------------------
+prefect==3.8.3
+
+# --- INGESTA -----------------------------------------------------------------
+# El extra [postgres] agrega el destino Postgres (psycopg2 + el dialecto).
+# dlt también aporta el cliente HTTP con retry, los paginadores y el estado
+# incremental: no hace falta tenacity ni un cliente propio.
+dlt[postgres]==1.30.0
+
+# --- TRANSFORMACIÓN ----------------------------------------------------------
+dbt-core==1.12.2
+dbt-postgres==1.11.0
+
+# --- CONFIGURACIÓN Y VALIDACIÓN ----------------------------------------------
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# --- OBSERVABILIDAD ----------------------------------------------------------
+loguru==0.7.3
+
+# --- WAREHOUSE ---------------------------------------------------------------
+# Conexiones propias (health checks, diagnóstico, permisos). El destino de dlt
+# usa su propia conexión.
+psycopg2-binary==2.9.12
+
+# --- HTTP y RESILIENCIA ------------------------------------------------------
+# requests: notificaciones (Telegram). dlt trae el suyo para la ingesta.
+requests==2.34.2
+# pybreaker: circuit breaker. Complementa al retry de dlt, que cubre la falla
+# puntual pero no el origen caído. Ver sources/frankfurter/client.py.
+pybreaker==1.4.1

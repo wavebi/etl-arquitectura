@@ -1,0 +1,101 @@
+# =============================================================================
+# PRODUCCIÓN — worker + server de Prefect en el servidor; la base es una
+# Postgres managed externa (no hay contenedor de base acá).
+# =============================================================================
+# La UI de Prefect NO se publica: escucha en 127.0.0.1 y se accede por túnel SSH.
+# El deploy lo hace .github/workflows/deploy.yml (rsync + compose up) tras un tag.
+# =============================================================================
+name: etl-arquitectura-prod
+
+x-env: &env_files
+  env_file:
+    # Un solo archivo por entorno, con TODAS las variables. En el servidor vive en la
+    # raíz del directorio de deploy (/opt/<proyecto>/app/prod/.env.prod), que es a lo
+    # que apunta este `../../` desde .deploy/prod/. La misma ruta relativa funciona
+    # dentro del repo, así que el archivo no cambia entre local y servidor.
+    - path: ../../.env.prod
+      required: false
+
+services:
+  prefect-server:
+    <<: *env_files
+    image: prefecthq/prefect:3.8.3-python3.13
+    command: prefect server start --host 0.0.0.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4200:4200"
+    environment:
+      # La metadata vive en el schema `prefect` de la misma base: una instancia menos
+      # que operar. Se conecta con su propio rol, cuyo search_path apunta a ese
+      # schema, y nadie más lo lee (ver docs/adr/0003).
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${PREFECT_DB_USER}:${PREFECT_DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?ssl=${DB_SSLMODE}
+      - PREFECT_UI_API_URL=/api
+      - TZ=${TIMEZONE}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:4200/api/health\")' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          memory: 256M
+    networks: [etl]
+
+  etl-worker:
+    <<: *env_files
+    # Imagen ya construida y publicada por el CI, identificada por el tag del release.
+    # El servidor NO compila ni necesita el código fuente: la imagen ya lo trae
+    # adentro (ver `COPY . /app` en el Dockerfile).
+    #
+    # Rollback = apuntar a la imagen anterior y levantar:
+    #     ETL_IMAGE=ghcr.io/<owner>/<repo>:etl-arquitectura-v1.2.3 docker compose up -d
+    #
+    # Para compilar en el servidor (emergencia, sin registry disponible):
+    #     docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+    image: ${ETL_IMAGE}
+    restart: unless-stopped
+    # Corte inmediato en el deploy, a propósito.
+    #
+    # Un `stop_grace_period` largo no sirve acá: medido el 2026-08-18, con una carga
+    # histórica en curso, `docker stop --timeout 3600` devolvió en 0 segundos. El
+    # worker de Prefect corta apenas recibe SIGTERM (le manda SIGINT a su proceso y
+    # sale), así que el período de gracia promete una espera que nunca ocurre.
+    #
+    # Y está bien que sea así, porque el pipeline banca que lo maten a la mitad:
+    #   - la corrida interrumpida queda RUNNING y el arranque siguiente la cancela
+    #     (`cancel_stale_runs.py` en el entrypoint);
+    #   - la carga es idempotente (merge por clave natural) y el rango de la próxima
+    #     corrida se deriva del estado en el destino, así que se retoma sola;
+    #   - verificado: tras matar una carga histórica a mitad, `diagnose_raw` no
+    #     encontró duplicados ni huecos.
+    #
+    # 30s le da margen a dlt para cerrar la conexión en curso y nada más.
+    stop_grace_period: 30s
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app/src
+      - PREFECT_HOME=/app/.prefect
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - DLT_DATA_DIR=/app/.dlt
+      - DBT_PROJECT_DIR=/app/src/dbt
+      - DBT_TARGET_PATH=/app/src/dbt/target
+      - DBT_LOG_PATH=/app/logs/dbt
+      - TZ=${TIMEZONE}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1536M
+        reservations:
+          memory: 256M
+    networks: [etl]
+
+networks:
+  etl:

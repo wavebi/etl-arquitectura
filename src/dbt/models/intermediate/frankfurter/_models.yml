@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: int_frankfurter__actividad_monedas
+    description: >
+      Universo completo de monedas del histórico, con su ventana de actividad y si
+      siguen vigentes. Reconcilia el catálogo actual del origen (~30 monedas) con las
+      que aparecen en 27 años de cotizaciones (~46). Grano: una moneda.
+    columns:
+      - name: codigo_moneda
+        data_tests: [unique, not_null]
+      - name: es_vigente
+        description: "True si el origen la publica hoy."
+        data_tests: [not_null]
+      - name: cantidad_dias_cotizados
+        description: "Días con cotización publicada. 0 para la moneda base."
+
+  - name: int_frankfurter__cotizaciones_diarias
+    description: >
+      Cotizaciones con la publicación anterior y las medidas derivadas (inversa,
+      variación porcentual, días desde la publicación previa). Grano: una fila por
+      fecha y par de monedas. Define qué significa "día anterior" para todo el
+      proyecto.
+    columns:
+      - name: cotizacion_inversa
+        description: "1 / cotización. Unidades de la base por 1 de la cotizada."
+      - name: variacion_pct
+        description: "Variación % contra la publicación anterior. Nula en la primera."
+      - name: dias_desde_anterior
+        description: "Días calendario desde la publicación previa (3 un lunes, más con feriado)."

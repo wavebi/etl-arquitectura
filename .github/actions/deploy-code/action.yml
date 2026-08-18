@@ -1,0 +1,37 @@
+name: "Deploy Compose"
+description: >
+  Copia al servidor SOLO lo que necesita para operar el stack: los archivos de
+  compose. El código fuente no va: ya viaja dentro de la imagen.
+
+inputs:
+  source_dir:
+    description: "Directorio origen (normalmente GITHUB_WORKSPACE)."
+    required: true
+    default: "${{ github.workspace }}"
+  target_dir:
+    description: "Directorio de deploy en el servidor."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Copiar los archivos de compose
+      shell: bash
+      run: |
+        set -euo pipefail
+        SRC="${{ inputs.source_dir }}"
+        DST="${{ inputs.target_dir }}"
+        echo "Copiando los archivos de deploy a $DST..."
+        mkdir -p "$DST/.deploy/prod"
+
+        # Solo el compose (y su override de emergencia). El resto del repo no hace
+        # falta: la imagen ya contiene el código, y dejar una copia del fuente en el
+        # servidor solo agrega superficie y confusión sobre cuál es la que corre.
+        #
+        # `--delete` acá dentro es seguro: borra lo que sobre de .deploy/prod/, y el
+        # `.env.prod` vive un nivel más arriba (en la raíz del directorio de deploy),
+        # así que no lo toca.
+        rsync -a --delete "$SRC/.deploy/prod/" "$DST/.deploy/prod/"
+
+        echo "Contenido del directorio de deploy:"
+        find "$DST" -maxdepth 3 -type f -not -name '.env*' | sed "s|$DST|.|"

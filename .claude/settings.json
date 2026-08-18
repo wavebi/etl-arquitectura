@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(gh run:*)",
+      "Bash(gh pr:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(make:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(uv pip:*)",
+      "Bash(uv venv:*)",
+      "Bash(venv/bin/ruff:*)",
+      "Bash(venv/bin/pytest:*)",
+      "Bash(venv/bin/dbt:*)",
+      "Bash(venv/bin/sqlfluff:*)",
+      "Bash(sqlfluff:*)",
+      "Bash(dbt:*)",
+      "Bash(wc:*)",
+      "Bash(sed -n:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/credentials*.json)",
+      "Read(./.deploy/**/.env)",
+      "Read(./**/*.dump)"
+    ]
+  }
+}

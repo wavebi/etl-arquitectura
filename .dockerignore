@@ -1,0 +1,18 @@
+__pycache__
+*.pyc
+.git
+.github
+# Ningún .env entra en la imagen. Tampoco los .tpl: son el contrato del repo, no
+# hacen falta en runtime y su presencia solo confundiría sobre de dónde sale la
+# configuración (viene del entorno del contenedor).
+.env*
+logs/
+docs/
+tests/
+venv/
+.venv/
+scripts/
+.tmp/
+data/
+.ruff_cache/
+.pytest_cache/

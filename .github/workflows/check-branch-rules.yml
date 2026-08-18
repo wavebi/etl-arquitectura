@@ -1,0 +1,36 @@
+name: Branch Flow Police
+
+# Flujo permitido:  feature/* -> dev -> main
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: branch-rules-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Branch Flow
+        run: |
+          BASE=${{ github.base_ref }}
+          HEAD=${{ github.head_ref }}
+          echo "Checking flow: $HEAD -> $BASE"
+
+          # A 'main' solo desde 'dev' o desde una rama de release-please.
+          if [[ "$BASE" == "main" ]]; then
+            if [[ "$HEAD" != "dev" && "$HEAD" != release-please-* ]]; then
+              echo "ERROR: a 'main' solo se mergea desde 'dev' o 'release-please-*' (viene de '$HEAD')."
+              exit 1
+            fi
+          fi
+
+          # A 'dev' nunca desde main (evita ciclos inversos).
+          if [[ "$BASE" == "dev" && "$HEAD" == "main" ]]; then
+            echo "ERROR: no mergees 'main' en 'dev' (ciclo inverso). Usá rebase local."
+            exit 1
+          fi
+
+          echo "Flujo correcto."

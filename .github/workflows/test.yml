@@ -1,0 +1,58 @@
+name: Test
+
+# Solo en Pull Request. No hace falta correr también en `push`: las ramas `dev` y
+# `main` están protegidas (no se puede pushear directo) y sus rulesets exigen que el
+# PR esté actualizado con la rama destino antes de mergear. Con eso, el árbol que se
+# testea en el PR es el mismo que queda en la rama: correr de nuevo post-merge sería
+# pagar dos veces por la misma verificación.
+#
+# Ver scripts/setup_branch_protection.sh y docs/deploy.md.
+on:
+  pull_request:
+    branches: [dev, main]
+  workflow_call:
+
+# Un push nuevo al PR cancela la corrida anterior: no tiene sentido esperar por un
+# commit que ya quedó viejo.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+      MIN_COVERAGE: "30"
+      TZ: America/Argentina/Buenos_Aires
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "requirements/dev.txt"
+
+      - name: Install dependencies
+        run: |
+          # setup-uv instala un Python GESTIONADO por uv, no uno del sistema: por eso
+          # `--system` falla con "No system Python installation found". Se crea un venv
+          # explícito y se lo pone en el PATH, así los pasos siguientes llaman a los
+          # binarios directo (incluidos los que corren con working-directory: src/dbt).
+          uv venv
+          echo "${{ github.workspace }}/.venv/bin" >> "$GITHUB_PATH"
+          uv pip install -r requirements/dev.txt
+
+      - name: Ruff lint
+        run: ruff check src/ tests/ scripts/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/ scripts/
+
+      # Solo unitarios: no levantan base ni salen a internet. Los de integración
+      # corren en local (`make test-int`) contra el Postgres del compose.
+      - name: Tests unitarios con coverage
+        run: pytest tests/unit --cov --cov-report=term-missing --cov-fail-under=$MIN_COVERAGE

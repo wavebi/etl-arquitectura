@@ -1,0 +1,66 @@
+# Dependabot: avisa con un PR cuando sale una versión nueva (incluidas las que
+# traen parches de seguridad).
+#
+# Por qué hace falta en un ETL: las dependencias están pineadas exactas para que la
+# ejecución sea reproducible. Eso es correcto, pero significa que sin un aviso
+# automático el proyecto se queda atrás en silencio y una CVE pasa desapercibida.
+# Los PR de Dependabot corren la suite (test.yml se dispara en pull_request), así
+# que llegan verificados.
+#
+# El deploy sigue disparándose por TAG: mergear uno de estos PR NO toca producción
+# hasta que release-please crea el tag.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/requirements"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Sin esto Dependabot apunta a la rama por defecto (main) y se saltea el flujo
+    # feature → dev → main, dejando main adelante de dev cada semana.
+    target-branch: "dev"
+    open-pull-requests-limit: 5
+    commit-message:
+      # commitlint exige commits convencionales (ver .commitlintrc.json).
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # Un solo PR con todos los parches y menores: menos ruido, misma cobertura.
+      # Los majors vienen sueltos porque pueden romper.
+      dependencias-menores:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # dbt-core y dbt-postgres tienen que subir JUNTOS y de a un minor: cada
+      # release cambia comportamientos de compilación (y a veces deprecaciones que
+      # rompen los YAML de tests). El major se planifica, no se mergea.
+      - dependency-name: "dbt-core"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dbt-postgres"
+        update-types: ["version-update:semver-major"]
+      # Prefect y dlt: el major cambia APIs del código de orquestación e ingesta.
+      - dependency-name: "prefect"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dlt"
+        update-types: ["version-update:semver-major"]
+
+  # Las GitHub Actions también reciben parches de seguridad.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "dev"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Imágenes base del Dockerfile (python:3.13-slim, etc.).
+  - package-ecosystem: "docker"
+    directory: "/.deploy"
+    schedule:
+      interval: "monthly"
+    target-branch: "dev"
+    commit-message:
+      prefix: "ci(deps)"
