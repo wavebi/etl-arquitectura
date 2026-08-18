@@ -37,15 +37,15 @@ jobs:
           cache-dependency-glob: "requirements/dev.txt"
 
       - name: Install dependencies
-        run: uv pip install -r requirements/dev.txt
+        run: uv pip install --system -r requirements/dev.txt
 
       - name: Ruff lint
-        run: uv run ruff check src/ tests/ scripts/
+        run: ruff check src/ tests/ scripts/
 
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/ scripts/
+        run: ruff format --check src/ tests/ scripts/
 
       # Solo unitarios: no levantan base ni salen a internet. Los de integración
       # corren en local (`make test-int`) contra el Postgres del compose.
       - name: Tests unitarios con coverage
-        run: uv run pytest tests/unit --cov --cov-report=term-missing --cov-fail-under=$MIN_COVERAGE
+        run: pytest tests/unit --cov --cov-report=term-missing --cov-fail-under=$MIN_COVERAGE
