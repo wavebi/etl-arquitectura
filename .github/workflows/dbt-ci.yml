@@ -56,7 +56,14 @@ jobs:
           cache-dependency-glob: "requirements/dev.txt"
 
       - name: Install dependencies
-        run: uv pip install --system -r requirements/dev.txt
+        run: |
+          # setup-uv instala un Python GESTIONADO por uv, no uno del sistema: por eso
+          # `--system` falla con "No system Python installation found". Se crea un venv
+          # explícito y se lo pone en el PATH, así los pasos siguientes llaman a los
+          # binarios directo (incluidos los que corren con working-directory: src/dbt).
+          uv venv
+          echo "${{ github.workspace }}/.venv/bin" >> "$GITHUB_PATH"
+          uv pip install -r requirements/dev.txt
 
       - name: Create schemas
         run: |
