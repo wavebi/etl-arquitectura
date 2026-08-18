@@ -162,6 +162,17 @@ solo refleja el presente). Al adaptar el repo a un cliente, reemplazala siguiend
 
 ## Documentación
 
+### Skills
+
+Playbooks ejecutables en `.claude/skills/`. Se cargan solos cuando la tarea encaja:
+
+| Skill | Para qué |
+|---|---|
+| `git-commit` | commitear en español pasando el pre-commit a la primera |
+| `pr-flow` | del `feat/*` a producción: PRs, checks, release, deploy |
+
+### Documentos
+
 | Documento | Para qué |
 |---|---|
 | `docs/arquitectura.md` | Cómo está armado y por qué cada decisión |
