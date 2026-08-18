@@ -52,7 +52,7 @@ tests/                               # unit/ (sin DB) · integration/ (Postgres 
 ## Comandos frecuentes
 
 ```bash
-make setup && make env-init && make up    # entorno completo en Docker
+make setup && make env-init && make up    # entorno completo (up también converge los permisos)
 
 make ingest                               # los dos recursos (currencies + rates)
 make ingest-currencies | ingest-rates     # un ETL a la vez

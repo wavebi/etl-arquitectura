@@ -151,15 +151,26 @@ entornos con el mismo envoltorio, `scripts/apply_db_permissions.sh`:
 
 | Entorno | Cuándo | Cómo |
 |---|---|---|
-| dev | al crear el volumen, y cuando quieras | init de Postgres · `make db-permissions` |
+| dev | en **cada `make up`**, y cuando quieras | `make up` · `make db-permissions` |
 | prod | en **cada deploy**, antes de levantar el stack | paso *Aplicar permisos de la base* |
 
 Que corra en cada deploy es lo que hace que un schema o un grant nuevo esté aplicado
 antes de que el worker intente usarlo, en vez de fallar en la primera corrida y que
 alguien tenga que entrar a la base a mano.
 
-`make db-permissions` no borra datos: es lo que hay que usar al tocar el SQL de
-permisos, en lugar de `make reset-db`.
+`make up` arranca en dos fases, igual que el deploy: levanta Postgres, espera a que
+acepte conexiones **por TCP**, aplica los permisos y recién entonces levanta el resto
+del stack. Así un cambio en los schemas o en los grants queda aplicado con solo
+volver a levantar el entorno.
+
+La espera es por TCP a propósito: en el primer arranque el entrypoint de la imagen
+levanta un servidor temporal con `listen_addresses=''` para correr los scripts de
+`/docker-entrypoint-initdb.d/`. Ese servidor atiende por socket unix pero no por TCP,
+así que una sonda por socket (o `pg_isready` a secas) daría OK antes de tiempo.
+
+`make db-permissions` corre lo mismo sin tocar el resto del stack, y **no borra
+datos**: es lo que hay que usar al tocar el SQL de permisos, en lugar de
+`make reset-db`.
 
 ### Qué pasa con las passwords
 
