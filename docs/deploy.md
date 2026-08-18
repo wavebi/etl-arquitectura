@@ -216,6 +216,7 @@ corrida y no tres.
 | `dbt-ci.yml` | PR que toca `src/dbt/**` | carga un fixture de `raw` y corre `dbt build` completo + sqlfluff contra un Postgres de servicio |
 | `commit-lint.yml` | PR | Conventional Commits y título del PR |
 | `check-branch-rules.yml` | PR | valida el flujo de ramas |
+| `docker-build.yml` | PR que toca `.deploy/`, `requirements/` o `.dockerignore` | construye las imágenes dev y prod y corre los tests adentro |
 | `release.yml` | push a `main` | release-please: Release PR y tag |
 | `deploy.yml` | tag `etl-arquitectura-v*` / manual | rsync al servidor + `compose up -d --build` |
 | `changelog.yml` | release publicada | actualiza el CHANGELOG en `main` |

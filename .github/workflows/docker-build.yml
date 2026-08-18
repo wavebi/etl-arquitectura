@@ -1,0 +1,66 @@
+name: Docker Build
+
+# Por qué existe este workflow, separado de `test`:
+#
+# `test.yml` y `dbt-ci.yml` instalan Python con setup-uv, NO usan la imagen. Y
+# `deploy.yml` —el único que la construye— corre recién con un tag, o sea DESPUÉS
+# de mergear. Resultado: un PR que cambia el Dockerfile o las dependencias podía
+# quedar todo en verde sin que nadie compilara nada, y el primer lugar donde se
+# notaba el problema era producción.
+#
+# Pasó de verdad: el PR #3 de Dependabot subió la base de python:3.13 a 3.14 (un
+# cambio de versión MAYOR) y los tres checks pasaron, porque el CI seguía probando
+# sobre 3.13. Hubo que construir la imagen y correr la suite adentro a mano.
+#
+# Se dispara solo cuando cambia algo que afecta a la imagen. Por eso NO conviene
+# hacerlo un check requerido en las reglas de rama: un check requerido que no corre
+# deja el PR esperando para siempre un estado que nunca llega.
+
+on:
+  pull_request:
+    paths:
+      - ".deploy/**"
+      - "requirements/**"
+      - ".dockerignore"
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Construir la imagen de desarrollo
+        run: docker build -f .deploy/Dockerfile --target dev -t etl-ci:dev .
+
+      # La prueba real: que las dependencias no solo instalen, sino que importen y
+      # funcionen sobre el intérprete de la imagen. Un cambio de versión de Python
+      # rompe acá, no en el build.
+      - name: Verificar que el stack importe dentro de la imagen
+        run: |
+          docker run --rm -e PREFECT_HOME=/tmp/prefect etl-ci:dev python -c "
+          import sys, dlt, dbt.version, prefect, pydantic, psycopg2
+          print('python  :', sys.version.split()[0])
+          print('dlt     :', dlt.__version__)
+          print('dbt     :', dbt.version.__version__)
+          print('prefect :', prefect.__version__)
+          print('pydantic:', pydantic.VERSION)
+          "
+
+      # El target `dev` no copia el código (en desarrollo se montea el repo), así
+      # que para correr los tests hay que montarlo igual que hace el compose.
+      - name: Tests unitarios dentro de la imagen
+        run: |
+          docker run --rm -v "$PWD":/app -w /app \
+            -e PYTHONPATH=/app/src -e PREFECT_HOME=/tmp/prefect \
+            etl-ci:dev python -m pytest tests/unit -q -p no:cacheprovider
+
+      # `prod` sí copia el código adentro: se construye para verificar que el COPY y
+      # el .dockerignore sigan siendo coherentes, que es lo que se despliega.
+      - name: Construir la imagen de producción
+        run: docker build -f .deploy/Dockerfile --target prod -t etl-ci:prod .
