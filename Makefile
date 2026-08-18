@@ -13,7 +13,7 @@
 # =============================================================================
 
 .PHONY: help setup setup-hooks hooks install-uv env-init env-render require-env \
-        up down restart build logs ps sh psql reset-db \
+        up down restart build logs ps sh psql reset-db wait-postgres \
         lint fmt sqlfmt \
         test test-cov test-int test-live test-all \
         dbt dbt-build dbt-deps dbt-compile dbt-docs \
@@ -128,12 +128,44 @@ require-env:
 
 # --- Stack Docker ------------------------------------------------------------
 
+# El arranque va en dos fases, igual que el deploy a producción: primero la base
+# con sus permisos convergidos, después el resto del stack.
+#
+# Por qué no alcanza con el init del contenedor: ese script corre UNA sola vez, con
+# el volumen vacío. Si alguien cambia los schemas o los grants y ya tenía la base
+# levantada, el cambio no se aplicaba hasta un `reset-db` (que borra los datos). Al
+# ser idempotente, reaplicarlo en cada `up` es barato y garantiza que la base
+# siempre refleje lo que dice el repo.
 up: require-env hooks
-	@echo "Levantando el stack ($(ENV))..."
+	@echo "Levantando Postgres ($(ENV))..."
+	@DOCKER_UID=$$(id -u) DOCKER_GID=$$(id -g) $(DOCKER_COMPOSE) up -d --build postgres
+	@$(MAKE) --no-print-directory wait-postgres
+	@$(MAKE) --no-print-directory db-permissions
+	@echo "Levantando el resto del stack..."
 	@DOCKER_UID=$$(id -u) DOCKER_GID=$$(id -g) $(DOCKER_COMPOSE) up -d --build
 	@echo ""
 	@echo "✅ Listo. Prefect UI: http://localhost:$$(grep -E '^PREFECT_UI_PORT=' $(ENV_FILE) | cut -d= -f2)"
 	@echo "   dbt docs:         http://localhost:$$(grep -E '^DBT_DOCS_PORT=' $(ENV_FILE) | cut -d= -f2)"
+
+# Espera a que Postgres acepte consultas de verdad.
+#
+# No alcanza con el healthcheck ni con `--wait` de compose. En el PRIMER arranque el
+# entrypoint de la imagen levanta un servidor TEMPORAL para correr los scripts de
+# /docker-entrypoint-initdb.d/, y ese servidor arranca con `listen_addresses=''`:
+# atiende por socket unix pero NO por TCP. Una sonda que entre por el socket (o
+# `pg_isready` a secas) daría OK mientras una conexión TCP todavía es rechazada.
+#
+# Por eso la sonda fuerza TCP con `-h 127.0.0.1`: es el mismo camino que usa
+# apply_db_permissions.sh, que se conecta desde otro contenedor de la red.
+wait-postgres:
+	@printf "Esperando a Postgres"
+	@for i in $$(seq 1 45); do \
+		if $(DOCKER_COMPOSE) exec -T postgres sh -c 'psql -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "select 1"' >/dev/null 2>&1; then \
+			echo " listo."; exit 0; \
+		fi; \
+		printf "."; sleep 2; \
+	done; \
+	echo ""; echo "❌ Postgres no respondió después de 90s."; exit 1
 
 down: require-env
 	@$(DOCKER_COMPOSE) down
@@ -171,13 +203,15 @@ db-permissions: require-env
 		$(VENV)/bin/python -c "import json,sys; print(next(iter(json.load(sys.stdin)['networks'].values()))['name'])") \
 	bash scripts/apply_db_permissions.sh
 
-# El init de Postgres (schemas, roles, permisos) corre UNA vez con el volumen
-# vacío: para volver a ejecutarlo hay que borrarlo.
+# Borra el volumen y vuelve a empezar. Usalo solo si querés perder los datos: para
+# reaplicar permisos sobre una base con datos está `make db-permissions`.
 reset-db: require-env
 	@echo "⚠️  Esto BORRA todos los datos del Postgres local."
 	@read -p "¿Seguro? [s/N] " ok && [ "$$ok" = "s" ] || exit 1
 	@$(DOCKER_COMPOSE) down -v
 	@DOCKER_UID=$$(id -u) DOCKER_GID=$$(id -g) $(DOCKER_COMPOSE) up -d postgres
+	@$(MAKE) --no-print-directory wait-postgres
+	@$(MAKE) --no-print-directory db-permissions
 	@echo "✅ Postgres reinicializado (schemas, roles y permisos aplicados)."
 
 # --- Ingesta -----------------------------------------------------------------
