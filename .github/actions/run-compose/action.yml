@@ -1,0 +1,82 @@
+name: "Run Compose"
+description: >
+  Renderiza el .env del entorno desde los GitHub Secrets, lo deja en el directorio de
+  deploy y ejecuta docker compose.
+
+inputs:
+  secrets_json:
+    description: >
+      JSON con los secrets del GitHub Environment. Se pasa como `${{ toJSON(secrets) }}`:
+      así no hay que enumerar cada variable en el workflow.
+    required: true
+  environment:
+    description: "Nombre del entorno (define qué .env.<entorno>.tpl se renderiza)."
+    required: true
+    default: "prod"
+  compose_file:
+    description: "Ruta al docker-compose.yml, relativa a working_directory."
+    required: true
+  compose_args:
+    description: 'Argumentos de docker compose (ej: "up -d --remove-orphans").'
+    required: true
+  working_directory:
+    description: "Directorio donde corre docker compose (el directorio de deploy)."
+    required: true
+  extra_env:
+    description: >
+      Líneas `CLAVE=valor` adicionales que se agregan al .env renderizado. Se usa para
+      variables que calcula el propio workflow, como la imagen a desplegar.
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Render del .env desde los GitHub Secrets
+      shell: bash
+      env:
+        SECRETS_JSON: ${{ inputs.secrets_json }}
+        WORKDIR: ${{ inputs.working_directory }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        EXTRA_ENV: ${{ inputs.extra_env }}
+      run: |
+        set -euo pipefail
+
+        # El JSON con TODOS los secrets es lo único efímero: se escribe en un temporal
+        # con permisos 600, se usa para resolver el contrato y se borra enseguida.
+        # Se pasa por variable de entorno (no por argumento) para que no aparezca en
+        # la lista de procesos.
+        SECRETS_FILE=$(mktemp)
+        chmod 600 "$SECRETS_FILE"
+        printf '%s' "$SECRETS_JSON" > "$SECRETS_FILE"
+
+        ENV_FILE="$WORKDIR/.env.$ENVIRONMENT"
+        mkdir -p "$WORKDIR"
+        python3 "${{ github.workspace }}/.deploy/render_env.py" \
+          "${{ github.workspace }}/.env.$ENVIRONMENT.tpl" "$ENV_FILE" \
+          --from-json "$SECRETS_FILE"
+
+        rm -f "$SECRETS_FILE"
+
+        # Variables que calcula el workflow (la imagen del release). Van al mismo
+        # archivo para que un `docker compose` manual en el servidor use exactamente
+        # lo mismo que usó el deploy.
+        if [ -n "$EXTRA_ENV" ]; then
+          printf '\n# --- Inyectado por el deploy ---\n%s\n' "$EXTRA_ENV" >> "$ENV_FILE"
+        fi
+
+        chmod 600 "$ENV_FILE"
+        echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
+        echo "✅ $ENV_FILE renderizado ($(grep -c '=' "$ENV_FILE") variables, permisos 600)"
+
+    - name: docker compose
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        set -euo pipefail
+        docker compose \
+          --env-file ".env.$ENVIRONMENT" \
+          -f "${{ inputs.compose_file }}" \
+          ${{ inputs.compose_args }}

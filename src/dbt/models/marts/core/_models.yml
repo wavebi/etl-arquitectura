@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: dim_fecha
+    description: >
+      Dimensión de fechas conformada, desde `start_date` hasta fin del año siguiente.
+      Grano: un día. Incluye días sin hechos a propósito.
+    columns:
+      - name: clave_fecha
+        description: "Clave subrogada AAAAMMDD (entero). Es la FK que usan los hechos."
+        data_tests:
+          - unique
+          - not_null
+      - name: fecha
+        data_tests:
+          - unique
+          - not_null
+      - name: es_dia_habil
+        data_tests: [not_null]
+
+  - name: dim_moneda
+    description: >
+      Dimensión de monedas conformada — FOTO ACTUAL. Grano: una moneda. Dimensión con
+      dos roles (base y cotizada): el hecho le apunta dos veces. Incluye monedas
+      históricas que el origen ya no publica, marcadas con `es_vigente = false`.
+    columns:
+      - name: clave_moneda
+        description: "Clave subrogada. FK de los hechos."
+        data_tests:
+          - unique
+          - not_null
+      - name: codigo_moneda
+        description: "Código ISO 4217 (clave natural del origen)."
+        data_tests:
+          - unique
+          - not_null
+      - name: nombre_moneda
+        description: "Nunca nulo: cae al nombre del seed y, en última instancia, al código."
+        data_tests: [not_null]
+      - name: es_vigente
+        data_tests: [not_null]
+      - name: region
+        data_tests: [not_null]
+
+  - name: dim_moneda_historia
+    description: >
+      Dimensión de monedas — HISTORIA (SCD Type 2). Grano: una moneda por período de
+      vigencia. Para reconstruir el estado a una fecha dada; los hechos NO le apuntan
+      (apuntan a `dim_moneda`).
+    columns:
+      - name: clave_version
+        description: "Clave subrogada de la versión (moneda + inicio de vigencia)."
+        data_tests:
+          - unique
+          - not_null
+      - name: clave_moneda
+        description: "Clave de la moneda: permite unir la historia con la foto actual."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda')
+                field: clave_moneda
+      - name: es_version_vigente
+        description: "True en la versión abierta (sin fecha de fin)."
+        data_tests: [not_null]

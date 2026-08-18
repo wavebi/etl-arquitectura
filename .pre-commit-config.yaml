@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.26.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 4.3.0
+    hooks:
+      - id: sqlfluff-lint
+        name: sqlfluff-lint
+        files: ^src/dbt/models/
+        additional_dependencies: ["sqlfluff-templater-dbt==4.3.0", "dbt-postgres==1.11.0"]
+      - id: sqlfluff-fix
+        name: sqlfluff-fix
+        files: ^src/dbt/models/
+        additional_dependencies: ["sqlfluff-templater-dbt==4.3.0", "dbt-postgres==1.11.0"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      # Última red de contención antes de commitear un secreto. Los .env están
+      # gitignoreados, pero un token pegado en un script o notebook no lo está.
+      - id: gitleaks

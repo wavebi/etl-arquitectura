@@ -1,0 +1,13 @@
+packages:
+  - package: dbt-labs/dbt_utils
+    version: [">=1.3.0", "<2.0.0"]
+
+  # Tests de calidad más expresivos (rangos, distribuciones, frescura).
+  - package: metaplane/dbt_expectations
+    version: [">=0.10.0", "<1.0.0"]
+
+  # Genera el YAML y el SQL base de un modelo a partir de la tabla de origen.
+  # Muy útil para dar de alta staging de tablas anchas: `dbt run-operation
+  # generate_base_model --args '{"source_name": "erp_api", "table_name": "..."}'`.
+  - package: dbt-labs/codegen
+    version: [">=0.13.0", "<1.0.0"]

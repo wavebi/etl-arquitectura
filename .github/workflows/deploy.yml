@@ -1,0 +1,100 @@
+name: Deploy (Production)
+
+on:
+  push:
+    tags:
+      # release-please tagea con el prefijo del componente (etl-arquitectura-vX.Y.Z).
+      # Se acepta también 'v*' para tags manuales.
+      - "etl-arquitectura-v*"
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Necesario para publicar la imagen en GHCR con el GITHUB_TOKEN (sin secretos extra).
+  packages: write
+
+jobs:
+  # Última verificación antes de producción. Los commits ya pasaron por commitlint en
+  # sus PR, así que acá no se repite: solo se corre la suite.
+  test:
+    uses: ./.github/workflows/test.yml
+
+  deploy:
+    name: Deploy
+    needs: [test]
+    runs-on: [self-hosted, Linux]
+    # GitHub Environment "prod": de acá salen los secrets que resuelven los .env.
+    environment: prod
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false # en prod nunca se cancela un deploy en curso
+
+    env:
+      # Una imagen por release, identificada por el tag. Es el artefacto que se
+      # despliega y al que se vuelve en un rollback.
+      IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+      IMAGE_LATEST: ghcr.io/${{ github.repository }}:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # ── Construir y publicar la imagen ────────────────────────────────────
+      # Se construye UNA vez, acá, y esa misma imagen es la que corre. El servidor
+      # no compila: así lo que se probó es exactamente lo que se despliega, y volver
+      # a una versión anterior es apuntar a otro tag en vez de reconstruir código
+      # viejo.
+      - name: Login en GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Construir la imagen
+        run: |
+          docker build \
+            --file .deploy/Dockerfile --target prod \
+            --tag "$IMAGE" --tag "$IMAGE_LATEST" \
+            .
+
+      - name: Publicar la imagen
+        run: |
+          docker push "$IMAGE"
+          docker push "$IMAGE_LATEST"
+
+      # ── Desplegar ─────────────────────────────────────────────────────────
+      - name: Copiar los archivos de compose
+        uses: ./.github/actions/deploy-code
+        with:
+          target_dir: /opt/etl-arquitectura/app/prod
+
+      - name: Levantar el stack
+        uses: ./.github/actions/run-compose
+        with:
+          secrets_json: ${{ toJSON(secrets) }}
+          environment: prod
+          compose_file: .deploy/prod/docker-compose.yml
+          compose_args: "up -d --remove-orphans"
+          working_directory: /opt/etl-arquitectura/app/prod
+          # La imagen la calcula este workflow, no sale de los secrets: se agrega al
+          # .env.prod para que quede registrada en el servidor (y para que un
+          # `docker compose` manual use la misma).
+          extra_env: |
+            ETL_IMAGE=${{ env.IMAGE }}
+
+      - name: Limpiar artefactos viejos de Docker
+        # Mantiene con disco libre al runner self-hosted. Las imágenes en uso quedan
+        # protegidas; `--filter until` conserva las de los últimos días para que un
+        # rollback reciente no tenga que volver a bajar la imagen.
+        run: |
+          docker image prune -af --filter "until=168h"
+          docker builder prune -af --keep-storage 2GB
+          docker container prune -f
+
+      - name: Resumen
+        if: always()
+        run: |
+          echo "## Deploy a producción — ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Imagen:** \`$IMAGE\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Disparado por:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Rollback: \`ETL_IMAGE=<tag-anterior> docker compose up -d\` en /opt/etl-arquitectura/app/prod" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,64 @@
+version: 2
+
+# Las fuentes declaran las tablas que escribe la capa de ingesta (dlt). Los modelos
+# de staging las leen con `{{ source(...) }}` y nunca con el nombre literal: así dbt
+# conoce el linaje y `dbt build --select source:frankfurter+` refresca todo lo que
+# depende de esa fuente.
+#
+# Los nombres de columna acá son los CRUDOS del origen (`date`, `base`, `currency`,
+# `rate`, `amount`): el pipeline no los toca (ver el `naming = direct` de dlt). El
+# renombre al español es responsabilidad de los modelos de staging.
+sources:
+  - name: frankfurter
+    description: >
+      Tablas raw cargadas por ingestion/pipelines/frankfurter (dlt). Tipos de cambio
+      diarios publicados por el Banco Central Europeo, con histórico desde 1999-01-04.
+    schema: raw
+    # freshness: si raw deja de actualizarse, los marts siguen respondiendo con datos
+    # viejos y nadie se entera. `dbt source freshness` lo detecta.
+    loaded_at_field: _ingested_at
+    freshness:
+      warn_after: {count: 30, period: hour}
+      error_after: {count: 72, period: hour}
+
+    tables:
+      - name: raw_frankfurter_exchange_rates
+        description: >
+          Una fila por día, moneda base y moneda cotizada. El BCE publica solo días
+          hábiles: los fines de semana y feriados no tienen fila (no son ceros).
+        columns:
+          - name: date
+            description: "Fecha de la cotización. Cursor incremental del pipeline."
+            data_tests: [not_null]
+          - name: base
+            description: "Moneda base (la del BCE: EUR)."
+            data_tests: [not_null]
+          - name: currency
+            description: "Moneda cotizada."
+            data_tests: [not_null]
+          - name: rate
+            description: "Cuántas unidades de la moneda cotizada equivalen a `amount` de la base."
+            data_tests: [not_null]
+          - name: amount
+            description: "Monto de la moneda base al que corresponde `rate` (siempre 1)."
+        data_tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ["date", "base", "currency"]
+              config:
+                # error: si esto falla, el UPSERT por clave natural se rompió y todos
+                # los promedios de los marts quedan mal.
+                severity: error
+
+      - name: raw_frankfurter_currencies
+        description: >
+          Catálogo de monedas que la API publica HOY (se recarga completo en cada
+          corrida). El histórico incluye monedas que ya no se publican: la dimensión
+          las reconcilia.
+        # Es un catálogo: no tiene fecha de negocio, no aplica freshness por dato.
+        freshness: null
+        columns:
+          - name: code
+            data_tests: [unique, not_null]
+          - name: name
+            data_tests: [not_null]
