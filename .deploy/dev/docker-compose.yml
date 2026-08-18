@@ -26,8 +26,8 @@ services:
     environment:
       # El container arranca con el superuser; los roles del ETL los crea
       # scripts/init_db_permissions.sql desde el init.
-      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_USER: ${PG_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-warehouse}
       TZ: ${TIMEZONE:-America/Argentina/Buenos_Aires}
       PGTZ: ${TIMEZONE:-America/Argentina/Buenos_Aires}

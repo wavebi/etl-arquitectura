@@ -67,6 +67,29 @@ jobs:
         with:
           target_dir: /opt/etl-arquitectura/app/prod
 
+      # ── Converger la base ANTES de levantar el stack ──────────────────────
+      # Schemas, roles, grants y default privileges. Es idempotente, así que corre
+      # en cada deploy: si un release agrega un schema o un permiso, queda aplicado
+      # antes de que el worker intente usarlo, en lugar de fallar en la primera
+      # corrida y que alguien tenga que entrar a la base a mano.
+      #
+      # Las claves de etl_app y prefect_app se SINCRONIZAN desde estos secrets (son
+      # los roles del stack). Las de bi_reader y analyst no se pisan si el rol ya
+      # existe. La justificación está en scripts/init_db_permissions.sql.
+      - name: Aplicar permisos de la base
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_SSLMODE: ${{ secrets.DB_SSLMODE }}
+          PG_ADMIN_USER: ${{ secrets.PG_ADMIN_USER }}
+          PG_ADMIN_PASSWORD: ${{ secrets.PG_ADMIN_PASSWORD }}
+          ETL_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PREFECT_DB_PASSWORD: ${{ secrets.PREFECT_DB_PASSWORD }}
+          BI_READER_PASSWORD: ${{ secrets.BI_READER_PASSWORD }}
+          ANALYST_PASSWORD: ${{ secrets.ANALYST_PASSWORD }}
+        run: bash scripts/apply_db_permissions.sh
+
       - name: Levantar el stack
         uses: ./.github/actions/run-compose
         with:
