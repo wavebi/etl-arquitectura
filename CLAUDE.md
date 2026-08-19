@@ -45,6 +45,7 @@ src/
 
 .deploy/{dev,prod}/                  # compose por entorno + Dockerfile + entrypoint
 .env.local.tpl, .env.prod.tpl        # contrato de variables (los .env no se commitean)
+dashboard/                           # tableros Next.js sobre los marts (lee con bi_reader)
 scripts/                             # init_db_permissions.sql, diagnose_raw.py, ...
 tests/                               # unit/ (sin DB) · integration/ (Postgres y API reales)
 ```
@@ -68,7 +69,7 @@ make logs | sh | psql | reset-db
 ```
 
 URLs del entorno local: Prefect http://localhost:4210 · dbt docs http://localhost:8085 ·
-Postgres `localhost:5442`.
+Dashboard http://localhost:3000 · Postgres `localhost:5442`.
 
 ## Convenciones
 

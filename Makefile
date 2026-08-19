@@ -146,6 +146,7 @@ up: require-env hooks
 	@echo ""
 	@echo "✅ Listo. Prefect UI: http://localhost:$$(grep -E '^PREFECT_UI_PORT=' $(ENV_FILE) | cut -d= -f2)"
 	@echo "   dbt docs:         http://localhost:$$(grep -E '^DBT_DOCS_PORT=' $(ENV_FILE) | cut -d= -f2)"
+	@echo "   Dashboard:        http://localhost:$$(grep -E '^DASHBOARD_PORT=' $(ENV_FILE) | cut -d= -f2)"
 
 # Espera a que Postgres acepte consultas de verdad.
 #

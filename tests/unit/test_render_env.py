@@ -69,6 +69,7 @@ def test_los_dos_entornos_declaran_las_mismas_variables():
         "POSTGRES_PORT",
         "PREFECT_UI_PORT",
         "DBT_DOCS_PORT",
+        "DASHBOARD_PORT",
         "DOCKER_UID",
         "DOCKER_GID",
     }

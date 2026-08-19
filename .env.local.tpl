@@ -64,6 +64,7 @@ PREFECT_WORK_POOL_NAME=${PREFECT_WORK_POOL_NAME:-etl-process-pool}
 POSTGRES_PORT=${POSTGRES_PORT:-5442}
 PREFECT_UI_PORT=${PREFECT_UI_PORT:-4210}
 DBT_DOCS_PORT=${DBT_DOCS_PORT:-8085}
+DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
 
 # UID/GID con los que corre el worker, para que los archivos que escribe en el repo
 # montado (target/ de dbt, logs) queden con tu usuario y no como root.

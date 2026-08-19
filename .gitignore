@@ -262,3 +262,9 @@ data/
 
 # Claude Code — settings locales del dev (los compartidos van en .claude/settings.json)
 .claude/settings.local.json
+
+# Dashboard (Next.js) — artefactos de build y dependencias
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/next-env.d.ts

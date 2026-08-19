@@ -151,6 +151,35 @@ services:
         condition: service_healthy
     networks: [etl]
 
+  # ── Dashboard ───────────────────────────────────────────────────────────
+  # Lee los marts con el rol `bi_reader`, que tiene SELECT solo sobre `marts` y
+  # `seeds`. No ve raw ni staging a propósito: si el tablero pudiera leer datos sin
+  # transformar, alguien construiría algo sobre ellos y se rompería en la próxima
+  # corrida del ETL.
+  #
+  # Es un servicio aparte y no parte de la imagen del ETL: son runtimes distintos
+  # (Node vs Python) y no comparten nada más que el contrato de los marts.
+  dashboard:
+    <<: *env_files
+    build:
+      context: ../../dashboard
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-warehouse}
+      - DB_USER=bi_reader
+      - DB_PASSWORD=${BI_READER_PASSWORD:-bi_password}
+      - DB_SSLMODE=disable
+      - TZ=${TIMEZONE:-America/Argentina/Buenos_Aires}
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [etl]
+
 volumes:
   postgres_data:
 
