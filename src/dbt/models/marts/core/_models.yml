@@ -14,7 +14,11 @@ models:
       - name: fecha
         data_tests:
           - unique
-          - not_null
+          # El miembro desconocido (clave_fecha = -1) tiene `fecha` nula a propósito:
+          # una fecha centinela podría colarse en un filtro por rango.
+          - not_null:
+              config:
+                where: "clave_fecha <> -1"
       - name: es_dia_habil
         data_tests: [not_null]
 
@@ -22,7 +26,9 @@ models:
     description: >
       Dimensión de monedas conformada — FOTO ACTUAL. Grano: una moneda. Dimensión con
       dos roles (base y cotizada): el hecho le apunta dos veces. Incluye monedas
-      históricas que el origen ya no publica, marcadas con `es_vigente = false`.
+      históricas que el origen ya no publica, marcadas con `es_vigente = false`, y el
+      miembro desconocido (`clave_moneda = '-1'`) al que caen los hechos que no
+      resuelven.
     columns:
       - name: clave_moneda
         description: "Clave subrogada. FK de los hechos."
@@ -42,11 +48,30 @@ models:
       - name: region
         data_tests: [not_null]
 
+  - name: dim_mes
+    description: >
+      Dimensión de meses — conformada REDUCIDA de `dim_fecha` (shrunken conformed
+      dimension). Grano: un mes calendario. Existe para que las tablas agregadas
+      tengan claves de dimensión en lugar de texto.
+    columns:
+      - name: clave_mes
+        description: "Clave subrogada AAAAMM (entero), coherente con el AAAAMMDD de dim_fecha."
+        data_tests:
+          - unique
+          - not_null
+      - name: anio_mes
+        data_tests:
+          - unique
+          - not_null
+      - name: nombre_mes
+        data_tests: [not_null]
+
   - name: dim_moneda_historia
     description: >
       Dimensión de monedas — HISTORIA (SCD Type 2). Grano: una moneda por período de
-      vigencia. Para reconstruir el estado a una fecha dada; los hechos NO le apuntan
-      (apuntan a `dim_moneda`).
+      vigencia. Los hechos le apuntan con `clave_version_moneda_*` (la versión vigente
+      en la fecha del hecho), además de apuntar a `dim_moneda` con la clave durable:
+      es el patrón de doble clave foránea de Kimball.
     columns:
       - name: clave_version
         description: "Clave subrogada de la versión (moneda + inicio de vigencia)."

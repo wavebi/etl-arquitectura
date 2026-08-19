@@ -31,6 +31,25 @@ models:
               arguments:
                 to: ref('dim_moneda')
                 field: clave_moneda
+      - name: clave_version_moneda_base
+        description: >
+          FK a dim_moneda_historia: la versión de la moneda base vigente EN LA FECHA
+          del hecho (Kimball, dual foreign key). Sirve para reportar con los
+          atributos de entonces; para "como es hoy" está clave_moneda_base.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda_historia')
+                field: clave_version
+      - name: clave_version_moneda_cotizada
+        description: "Ídem, para la moneda cotizada."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda_historia')
+                field: clave_version
       - name: cotizacion
         data_tests:
           - not_null
@@ -54,6 +73,29 @@ models:
       Agregado mensual por par de monedas: promedio, mínimo, máximo, apertura, cierre
       y volatilidad. Grano: mes × par de monedas.
     columns:
+      - name: clave_mes
+        description: "FK a dim_mes, la dimensión conformada reducida de dim_fecha."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_mes')
+                field: clave_mes
+      - name: clave_moneda_base
+        description: "La MISMA FK que usa el hecho atómico, para poder unir a dim_moneda."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda')
+                field: clave_moneda
+      - name: clave_moneda_cotizada
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_moneda')
+                field: clave_moneda
       - name: anio_mes
         data_tests: [not_null]
       - name: cantidad_dias_publicados

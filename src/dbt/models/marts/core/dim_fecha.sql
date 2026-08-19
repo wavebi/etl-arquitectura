@@ -52,6 +52,34 @@ final as (
 
     from fechas as d
 
+),
+
+-- Miembro desconocido (Kimball). Ver la nota en `dim_moneda`: existe para que un
+-- hecho con fecha nula o irresoluble tenga a dónde apuntar en lugar de perderse.
+-- Se usa -1 y no una fecha centinela para que no aparezca nunca en un rango.
+desconocido as (
+
+    select
+        cast(-1 as integer)         as clave_fecha,
+        cast(null as date)          as fecha,
+        cast(null as integer)       as anio,
+        cast(null as integer)       as trimestre,
+        cast(null as integer)       as mes,
+        cast(null as integer)       as dia_del_mes,
+        cast(null as integer)       as dia_de_semana,
+        cast(null as integer)       as semana_iso,
+        'Sin identificar'           as nombre_mes,
+        'Sin identificar'           as nombre_dia,
+        'N/D'                       as anio_mes,
+        'N/D'                       as nombre_trimestre,
+        cast(false as boolean)      as es_dia_habil,
+        cast(false as boolean)      as es_primer_dia_del_mes,
+        cast(false as boolean)      as es_ultimo_dia_del_mes,
+        cast(null as date)          as primer_dia_del_mes,
+        cast(null as date)          as ultimo_dia_del_mes
+
 )
 
 select * from final
+union all
+select * from desconocido
