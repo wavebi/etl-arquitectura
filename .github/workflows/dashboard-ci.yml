@@ -1,0 +1,51 @@
+name: Dashboard CI
+
+# Solo cuando cambia el dashboard: el resto del repo es Python y no tiene por qué
+# pagar un `npm ci` en cada PR.
+#
+# Por la misma razón que `docker-build.yml`, NO se agrega a los checks requeridos de
+# las reglas de rama: con filtro por paths no corre en la mayoría de los PR, y un
+# check requerido que no corre deja el PR esperando para siempre.
+
+on:
+  pull_request:
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/dashboard-ci.yml"
+
+concurrency:
+  group: dashboard-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dashboard:
+    name: dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # No hay un paso de `tsc --noEmit` aparte: `next build` ya corre TypeScript, y
+      # tsc suelto falla porque no ve los tipos que Next GENERA durante el build en
+      # .next/types (LayoutProps, PageProps y demás).
+      #
+      # El build NO necesita la base: todas las páginas con datos declaran
+      # `dynamic = "force-dynamic"`. Si alguna intentara prerenderizar, este paso
+      # fallaría con ECONNREFUSED, que es justo la señal que se quiere.
+      - name: Build
+        run: npm run build

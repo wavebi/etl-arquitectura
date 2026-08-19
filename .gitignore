@@ -14,8 +14,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anclados a la raíz: sin la barra inicial, `lib/` matchea CUALQUIER carpeta llamada
+# así en cualquier nivel, y se tragaba `dashboard/src/lib/` — el código no llegaba al
+# repo y el build fallaba solo en un clone limpio.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -262,3 +265,9 @@ data/
 
 # Claude Code — settings locales del dev (los compartidos van en .claude/settings.json)
 .claude/settings.local.json
+
+# Dashboard (Next.js) — artefactos de build y dependencias
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/next-env.d.ts
