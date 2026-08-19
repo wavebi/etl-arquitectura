@@ -54,6 +54,34 @@ final as (
     from actividad as a
     left join regiones as r on a.codigo_moneda = r.codigo_moneda
 
+),
+
+-- Miembro desconocido (Kimball). Existe para que NINGÚN hecho se quede sin padre:
+-- los hechos se unen con `left join` y caen acá cuando el código no resuelve.
+--
+-- Sin esta fila habría que usar `inner join`, y una moneda que no esté en la
+-- dimensión haría DESAPARECER la fila del hecho: sin error, sin test en rojo y sin
+-- rastro. Con el miembro desconocido el problema se vuelve un número que se cuenta
+-- y se alerta:  select count(*) from marts.fct_cotizacion where clave_moneda_base = '-1'
+--
+-- Hoy no puede dispararse porque la dimensión se arma con la unión de lo observado
+-- en los propios hechos. Eso es una garantía por construcción, no por diseño: se
+-- rompe el día que una segunda fuente alimente el hecho.
+desconocido as (
+
+    select
+        cast('-1' as text)      as clave_moneda,
+        'N/D'                   as codigo_moneda,
+        'Sin identificar'       as nombre_moneda,
+        'Sin clasificar'        as region,
+        cast(false as boolean)  as es_vigente,
+        cast(false as boolean)  as es_moneda_base,
+        cast(null as date)      as primera_fecha,
+        cast(null as date)      as ultima_fecha,
+        cast(0 as bigint)       as cantidad_dias_cotizados
+
 )
 
 select * from final
+union all
+select * from desconocido

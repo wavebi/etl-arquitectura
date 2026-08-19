@@ -147,7 +147,12 @@ cambiar una, entendé primero por qué está (`docs/arquitectura.md` y `docs/adr
     tiene reconciliación (`/currencies` ignora las fechas — ver
     `docs/fuentes/frankfurter.md`). Un parámetro que el origen ignora es una
     promesa falsa.
-16. **El overlap es política operativa, no código.** `INGEST_OVERLAP_DAYS` y
+16. **Kimball estricto en marts.** Toda dimensión tiene miembro desconocido (`-1`) y
+    los hechos se unen con `left join`: un `inner join` descarta filas en silencio,
+    igual que una carga parcial de dlt sin chequear. Si hay una dimensión Type 2, el
+    hecho lleva también su clave de versión. Reglas completas en la skill
+    `modelado-kimball`; el porqué, en el ADR 0007.
+17. **El overlap es política operativa, no código.** `INGEST_OVERLAP_DAYS` y
     `INGEST_RECONCILE_OVERLAP_DAYS` viven en `.env`; los flows y deployments pasan
     `None` y dejan que se resuelvan. Cambiar cuánto se re-pide no debe requerir un
     deploy.
@@ -170,6 +175,7 @@ Playbooks ejecutables en `.claude/skills/`. Se cargan solos cuando la tarea enca
 |---|---|
 | `git-commit` | commitear en español pasando el pre-commit a la primera |
 | `pr-flow` | del `feat/*` a producción: PRs, checks, release, deploy |
+| `modelado-kimball` | reglas del modelado dimensional, verificadas con tests |
 
 ### Documentos
 
