@@ -8,7 +8,7 @@ pytest-mock==3.15.1
 
 # --- LINTING -----------------------------------------------------------------
 # ruff: linter + formateador (reemplaza black, isort y flake8).
-ruff==0.16.3
+ruff==0.16.5
 # sqlfluff: linter de los modelos dbt (usa el templater de dbt para compilar).
 sqlfluff==4.3.0
 sqlfluff-templater-dbt==4.3.0
